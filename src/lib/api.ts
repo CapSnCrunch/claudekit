@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ProjectSummary,
   SessionSummary,
+  SessionInfo,
   MessageRecord,
   DashboardStats,
   HeatmapDay,
@@ -30,4 +31,10 @@ export const api = {
 
   getDayDetail: (date: string) =>
     invoke<DayDetail>("get_day_detail", { date }),
+
+  getSessionInfo: (sessionId: string) =>
+    invoke<SessionInfo>("get_session_info", { sessionId }),
+
+  openInApp: (app: "claude_code" | "cursor" | "claude_desktop", projectPath: string, sessionId?: string) =>
+    invoke<void>("open_in_app", { app, projectPath, sessionId }),
 };

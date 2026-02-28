@@ -62,6 +62,13 @@ export interface IndexStats {
   durationMs: number;
 }
 
+export interface SessionInfo {
+  sessionId: string;
+  title: string | null;
+  projectId: string;
+  projectDecodedPath: string;
+}
+
 // Anthropic content block types (parsed from MessageRecord.contentJson)
 export type ContentBlock =
   | { type: "text"; text: string }
