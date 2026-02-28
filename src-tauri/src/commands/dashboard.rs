@@ -120,9 +120,11 @@ pub fn get_heatmap_data(
 
     let mut stmt = conn
         .prepare(
-            "SELECT DATE(created_at) as day, COUNT(*) as count
-             FROM sessions
-             WHERE DATE(created_at) BETWEEN ?1 AND ?2
+            "SELECT DATE(timestamp) as day, COUNT(*) as count
+             FROM messages
+             WHERE role = 'user'
+               AND is_summary = 0
+               AND DATE(timestamp) BETWEEN ?1 AND ?2
              GROUP BY day
              ORDER BY day ASC",
         )

@@ -9,7 +9,7 @@ interface SidebarProps {
   selectedProjectId: string | null;
   selectedSessionId: string | null;
   onSelectProject: (id: string) => void;
-  onSelectSession: (id: string) => void;
+  onSelectSession: (id: string | null) => void;
 }
 
 export function Sidebar({
@@ -22,7 +22,6 @@ export function Sidebar({
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [sessionsByProject, setSessionsByProject] = useState<Record<string, SessionSummary[]>>({});
   const [loadingSessions, setLoadingSessions] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<"dashboard" | "session">("dashboard");
 
   useEffect(() => {
     api.listProjects().then(setProjects).catch(console.error);
@@ -32,14 +31,13 @@ export function Sidebar({
     const next = new Set(expandedProjects);
     if (next.has(projectId)) {
       next.delete(projectId);
-      setExpandedProjects(next);
     } else {
       next.add(projectId);
-      setExpandedProjects(next);
       if (!sessionsByProject[projectId]) {
         loadSessions(projectId);
       }
     }
+    setExpandedProjects(next);
     onSelectProject(projectId);
   }
 
@@ -59,11 +57,7 @@ export function Sidebar({
     }
   }
 
-  function handleSelectSession(sessionId: string, projectId: string) {
-    onSelectProject(projectId);
-    onSelectSession(sessionId);
-    setView("session");
-  }
+  const isDashboard = selectedSessionId === null;
 
   return (
     <aside className="w-64 shrink-0 flex flex-col border-r border-border bg-card h-full">
@@ -74,15 +68,13 @@ export function Sidebar({
 
       {/* Dashboard link */}
       <button
-        onClick={() => setView("dashboard")}
+        onClick={() => onSelectSession(null)}
         className={cn(
           "flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent transition-colors text-left",
-          view === "dashboard" && selectedSessionId === null
-            ? "bg-accent text-accent-foreground font-medium"
-            : "text-muted-foreground"
+          isDashboard ? "text-foreground font-medium" : "text-muted-foreground"
         )}
       >
-        <LayoutDashboard size={14} />
+        <LayoutDashboard size={14} className={isDashboard ? "text-primary" : ""} />
         Dashboard
       </button>
 
@@ -105,7 +97,7 @@ export function Sidebar({
               isLoadingSessions={loadingSessions.has(project.id)}
               selectedSessionId={selectedSessionId}
               onToggle={() => toggleProject(project.id)}
-              onSelectSession={(sid) => handleSelectSession(sid, project.id)}
+              onSelectSession={(sid) => onSelectSession(sid)}
             />
           ))
         )}
@@ -138,7 +130,7 @@ function ProjectRow({
     <div>
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-sm hover:bg-accent transition-colors text-left group"
+        className="w-full flex items-center gap-1.5 px-3 py-1.5 hover:bg-accent transition-colors text-left"
       >
         {isExpanded ? (
           <ChevronDown size={13} className="text-muted-foreground shrink-0" />
@@ -191,9 +183,7 @@ function SessionRow({
       onClick={onSelect}
       className={cn(
         "w-full flex flex-col items-start px-4 py-2 text-left hover:bg-accent transition-colors border-l-2",
-        isSelected
-          ? "border-l-primary bg-accent"
-          : "border-l-transparent"
+        isSelected ? "border-l-primary bg-accent" : "border-l-transparent"
       )}
     >
       <span className="text-xs text-foreground truncate w-full leading-snug">{title}</span>

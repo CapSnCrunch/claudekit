@@ -4,7 +4,7 @@ interface AppShellProps {
   selectedProjectId: string | null;
   selectedSessionId: string | null;
   onSelectProject: (id: string) => void;
-  onSelectSession: (id: string) => void;
+  onSelectSession: (id: string | null) => void;
   children: React.ReactNode;
 }
 
