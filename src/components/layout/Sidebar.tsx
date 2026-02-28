@@ -10,6 +10,8 @@ interface SidebarProps {
   selectedSessionId: string | null;
   onSelectProject: (id: string) => void;
   onSelectSession: (id: string | null) => void;
+  lastSynced: number;
+  onSync: () => Promise<void>;
 }
 
 export function Sidebar({
@@ -17,15 +19,35 @@ export function Sidebar({
   selectedSessionId,
   onSelectProject,
   onSelectSession,
+  lastSynced,
+  onSync,
 }: SidebarProps) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [sessionsByProject, setSessionsByProject] = useState<Record<string, SessionSummary[]>>({});
   const [loadingSessions, setLoadingSessions] = useState<Set<string>>(new Set());
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     api.listProjects().then(setProjects).catch(console.error);
   }, []);
+
+  // Re-fetch projects and already-expanded sessions after every sync
+  useEffect(() => {
+    if (lastSynced === 0) return;
+    api.listProjects().then(setProjects).catch(console.error);
+    expandedProjects.forEach((pid) => loadSessions(pid));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastSynced]);
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      await onSync();
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   function toggleProject(projectId: string) {
     const next = new Set(expandedProjects);
@@ -62,8 +84,16 @@ export function Sidebar({
   return (
     <aside className="w-64 shrink-0 flex flex-col border-r border-border bg-card h-full">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <span className="font-semibold text-sm tracking-wide text-foreground">ClaudeKit</span>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          title="Sync sessions"
+          className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+        >
+          <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
+        </button>
       </div>
 
       {/* Dashboard link */}
