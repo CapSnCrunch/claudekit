@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { MessageSquare, FolderOpen, TrendingUp, TrendingDown, Minus, Hash, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { MessageSquare, FolderOpen, TrendingUp, TrendingDown, Minus, Hash, X, ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import type { DashboardStats, HeatmapDay, DayDetail } from "@/types";
 import { ActivityHeatmap } from "./ActivityHeatmap";
 
-export function Dashboard() {
+interface DashboardProps {
+  onSelectSession?: (id: string) => void;
+}
+
+export function Dashboard({ onSelectSession }: DashboardProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapDay[]>([]);
   const currentYear = new Date().getFullYear();
@@ -134,6 +138,7 @@ export function Dashboard() {
               detail={loadingDetail ? null : dayDetail}
               loading={loadingDetail}
               onClose={() => { setSelectedDate(null); setDayDetail(null); }}
+              onSelectSession={onSelectSession}
             />
           </div>
         )}
@@ -147,11 +152,13 @@ function DayDetailPanel({
   detail,
   loading,
   onClose,
+  onSelectSession,
 }: {
   date: string | null;
   detail: DayDetail | null;
   loading: boolean;
   onClose: () => void;
+  onSelectSession?: (id: string) => void;
 }) {
   const displayDate = date ? format(new Date(date + "T12:00:00"), "EEEE, MMMM d, yyyy") : "";
 
@@ -184,28 +191,49 @@ function DayDetailPanel({
       )}
 
       {!loading && detail && detail.sessions.length > 0 && (
-        <div className="space-y-2">
-          {detail.sessions.map((session) => (
-            <div
-              key={session.sessionId}
-              className="flex items-center justify-between py-2 border-b border-border last:border-0"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-foreground truncate">
-                  {session.title ?? "Untitled session"}
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                  <FolderOpen size={10} />
-                  {session.projectName}
-                </p>
+        <div className="space-y-0.5">
+          {detail.sessions.map((session) => {
+            const clickable = !!onSelectSession;
+            return (
+              <div
+                key={session.sessionId}
+                role={clickable ? "button" : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                onClick={() => onSelectSession?.(session.sessionId)}
+                onKeyDown={(e) => {
+                  if (clickable && (e.key === "Enter" || e.key === " ")) {
+                    onSelectSession?.(session.sessionId);
+                  }
+                }}
+                className={`flex items-center justify-between py-2 border-b border-border last:border-0 rounded-sm px-1 -mx-1 ${
+                  clickable
+                    ? "cursor-pointer hover:bg-accent transition-colors group"
+                    : ""
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-foreground truncate">
+                    {session.title ?? "Untitled session"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                    <FolderOpen size={10} />
+                    {session.projectName}
+                  </p>
+                </div>
+                <div className="ml-4 shrink-0 flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    {session.userMessageCount} msg{session.userMessageCount !== 1 ? "s" : ""}
+                  </span>
+                  {clickable && (
+                    <ArrowRight
+                      size={12}
+                      className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    />
+                  )}
+                </div>
               </div>
-              <div className="ml-4 shrink-0 text-right">
-                <span className="text-xs text-muted-foreground">
-                  {session.userMessageCount} msg{session.userMessageCount !== 1 ? "s" : ""}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -8,7 +8,8 @@ use std::sync::Mutex;
 use commands::{
     dashboard::{get_dashboard_stats, get_heatmap_data, get_day_detail},
     projects::list_projects,
-    sessions::{get_session_messages, list_sessions},
+    sessions::{get_session_messages, get_session_info, list_sessions},
+    shell::open_in_app,
 };
 use rusqlite::Connection;
 
@@ -44,9 +45,11 @@ pub fn run() {
             list_projects,
             list_sessions,
             get_session_messages,
+            get_session_info,
             get_dashboard_stats,
             get_heatmap_data,
             get_day_detail,
+            open_in_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

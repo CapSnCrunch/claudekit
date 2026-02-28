@@ -111,6 +111,39 @@ pub fn get_session_messages(
     Ok(messages)
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionInfo {
+    pub session_id: String,
+    pub title: Option<String>,
+    pub project_id: String,
+    pub project_decoded_path: String,
+}
+
+#[tauri::command]
+pub fn get_session_info(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<SessionInfo, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    conn.query_row(
+        "SELECT s.id, s.title, s.project_id, p.decoded_path
+         FROM sessions s
+         JOIN projects p ON p.id = s.project_id
+         WHERE s.id = ?1",
+        rusqlite::params![session_id],
+        |row| {
+            Ok(SessionInfo {
+                session_id: row.get(0)?,
+                title: row.get(1)?,
+                project_id: row.get(2)?,
+                project_decoded_path: row.get(3)?,
+            })
+        },
+    )
+    .map_err(|e| e.to_string())
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

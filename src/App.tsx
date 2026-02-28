@@ -33,7 +33,7 @@ function App() {
       ) : selectedSessionId ? (
         <ConversationView sessionId={selectedSessionId} />
       ) : (
-        <Dashboard />
+        <Dashboard onSelectSession={setSelectedSessionId} />
       )}
     </AppShell>
   );

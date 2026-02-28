@@ -184,6 +184,32 @@ User selects any prompt (from session history or types a new one), clicks "Optim
 
 ---
 
+## 6b. App Connectivity & Deep Links
+
+*Feature idea — surfaced 2026-02-28*
+
+ClaudeKit should feel deeply connected to the rest of the Claude/developer toolchain rather than being a read-only archive. Two concrete touchpoints:
+
+### In-app navigation
+- **Dashboard day-detail sessions** — session rows in the heatmap day-detail panel should be clickable; clicking one navigates directly to that session's ConversationView. This closes the loop between "what did I do today?" and "let me read that conversation."
+
+### "Open in" / "Resume in" — session page toolbar
+Each session view should expose one-click launch actions for the tools the user actually works in:
+
+| Button | What it does |
+|--------|-------------|
+| **Resume in Claude Code** | Opens a terminal, `cd`s to the project directory, and runs `claude --resume <session-id>`. macOS: via AppleScript → Terminal.app; Linux: via `xterm`. |
+| **Open in Cursor** | Opens the project directory in Cursor (`cursor <path>` CLI). |
+| **Open in Claude Desktop** | Launches the Claude Desktop app (`open -a Claude` on macOS). Useful for starting a fresh conversation with context from the session. |
+
+**Implementation notes:**
+- Requires a `get_session_info` Tauri command (joins sessions → projects to get `decoded_path`).
+- Requires an `open_in_app` Tauri command that uses `std::process::Command` for platform-specific shell calls.
+- Claude Desktop button opens the app but cannot auto-import a session (different product/protocol).
+- Windows support for Claude Code terminal launch deferred; Cursor URL scheme (`cursor://file/<path>`) may be used as an alternative to the CLI.
+
+---
+
 ## 7. Development Phases
 
 Each phase has its own PRD and TDD, which are derived from this master document.
