@@ -196,6 +196,25 @@ fn upsert_session(
     let title = jsonl::extract_title(entries);
     let message_count = non_summary.len() as i64;
 
+    // Count only entries where the human actually typed a prompt:
+    // role = "user" and content contains at least one text block
+    // (excludes tool_result-only messages that come back from tools)
+    let user_message_count = entries.iter().filter(|e| {
+        let role = e.message.as_ref()
+            .and_then(|m| m.role.as_deref())
+            .unwrap_or(&e.entry_type);
+        if role != "user" || e.entry_type == "summary" { return false; }
+        if let Some(content) = e.message.as_ref().and_then(|m| m.content.as_ref()) {
+            if content.is_string() { return true; }  // plain string = human text
+            if let Some(arr) = content.as_array() {
+                return arr.iter().any(|block| {
+                    block.get("type").and_then(|t| t.as_str()) == Some("text")
+                });
+            }
+        }
+        false
+    }).count() as i64;
+
     let total_input: i64 = entries
         .iter()
         .filter_map(|e| e.usage.as_ref()?.input_tokens)
@@ -208,12 +227,14 @@ fn upsert_session(
 
     conn.execute(
         "INSERT INTO sessions
-            (id, project_id, title, message_count, total_input_tokens, total_output_tokens,
+            (id, project_id, title, message_count, user_message_count,
+             total_input_tokens, total_output_tokens,
              total_cost_usd, created_at, updated_at, indexed_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, datetime('now'))
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))
          ON CONFLICT(id) DO UPDATE SET
              title               = excluded.title,
              message_count       = excluded.message_count,
+             user_message_count  = excluded.user_message_count,
              total_input_tokens  = excluded.total_input_tokens,
              total_output_tokens = excluded.total_output_tokens,
              total_cost_usd      = excluded.total_cost_usd,
@@ -224,6 +245,7 @@ fn upsert_session(
             project_id,
             title,
             message_count,
+            user_message_count,
             total_input,
             total_output,
             total_cost,
@@ -256,17 +278,33 @@ fn upsert_session(
         let output_tokens = entry.usage.as_ref().and_then(|u| u.output_tokens);
         let is_summary = if entry.entry_type == "summary" { 1 } else { 0 };
 
+        // is_human_prompt: user-role entry with at least one text content block
+        let is_human_prompt = if role == "user" && is_summary == 0 {
+            if let Some(msg) = &entry.message {
+                if let Some(content) = &msg.content {
+                    if content.is_string() {
+                        1
+                    } else if let Some(arr) = content.as_array() {
+                        if arr.iter().any(|b| {
+                            b.get("type").and_then(|t| t.as_str()) == Some("text")
+                        }) { 1 } else { 0 }
+                    } else { 0 }
+                } else { 0 }
+            } else { 0 }
+        } else { 0 };
+
         conn.execute(
             "INSERT OR REPLACE INTO messages
-                (id, session_id, parent_id, role, is_summary, content_json,
+                (id, session_id, parent_id, role, is_summary, is_human_prompt, content_json,
                  input_tokens, output_tokens, cost_usd, model, timestamp, ordinal)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 entry.uuid,
                 session_id,
                 entry.parent_uuid,
                 role,
                 is_summary,
+                is_human_prompt,
                 content_json,
                 input_tokens,
                 output_tokens,

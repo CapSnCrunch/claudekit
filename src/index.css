@@ -59,3 +59,31 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+/* ── Animation utilities ──────────────────────────────────────── */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-slide-down {
+  animation: slideDown 0.18s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.15s ease-out forwards;
+}
+
+/* Smooth expand/collapse using grid-template-rows trick */
+.collapsible-grid {
+  display: grid;
+  transition: grid-template-rows 0.2s ease-in-out;
+}
+.collapsible-grid > * {
+  overflow: hidden;
+}

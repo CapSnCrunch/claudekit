@@ -11,6 +11,7 @@ pub struct SessionSummary {
     pub project_id: String,
     pub title: Option<String>,
     pub message_count: i64,
+    pub user_message_count: i64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -43,7 +44,7 @@ pub fn list_sessions(
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, project_id, title, message_count, created_at, updated_at
+            "SELECT id, project_id, title, message_count, user_message_count, created_at, updated_at
              FROM sessions
              WHERE project_id = ?1
              ORDER BY created_at DESC
@@ -58,8 +59,9 @@ pub fn list_sessions(
                 project_id: row.get(1)?,
                 title: row.get(2)?,
                 message_count: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
+                user_message_count: row.get(4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
             })
         })
         .map_err(|e| e.to_string())?

@@ -2,7 +2,8 @@ use rusqlite::Connection;
 use crate::db::DbError;
 
 const MIGRATIONS: &[&str] = &[
-    // v1 — initial schema
+    // v1 — initial schema (see below),
+    // v2 — human prompt tracking
     "
     CREATE TABLE IF NOT EXISTS schema_migrations (
         version    INTEGER PRIMARY KEY,
@@ -49,6 +50,14 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
     CREATE INDEX IF NOT EXISTS idx_messages_timestamp  ON messages(timestamp);
+    ",
+
+    // v2 — add is_human_prompt to messages, user_message_count to sessions,
+    //       reset indexed_at to force full re-index so new columns are populated
+    "
+    ALTER TABLE messages ADD COLUMN is_human_prompt INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE sessions ADD COLUMN user_message_count INTEGER NOT NULL DEFAULT 0;
+    UPDATE sessions SET indexed_at = '1970-01-01 00:00:00';
     ",
 ];
 

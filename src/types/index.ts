@@ -11,6 +11,7 @@ export interface SessionSummary {
   projectId: string;
   title: string | null;
   messageCount: number;
+  userMessageCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,12 +35,24 @@ export interface DashboardStats {
   sessionsThisWeek: number;
   sessionsLastWeek: number;
   mostActiveProject: ProjectSummary | null;
-  longestSession: SessionSummary | null;
 }
 
 export interface HeatmapDay {
   date: string;
   count: number;
+}
+
+export interface DaySession {
+  sessionId: string;
+  projectName: string;
+  title: string | null;
+  userMessageCount: number;
+}
+
+export interface DayDetail {
+  date: string;
+  totalMessages: number;
+  sessions: DaySession[];
 }
 
 export interface IndexStats {

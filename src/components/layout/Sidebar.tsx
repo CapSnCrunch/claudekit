@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, LayoutDashboard, FolderOpen, MessageSquare, RefreshCw } from "lucide-react";
+import { ChevronRight, LayoutDashboard, FolderOpen, MessageSquare, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -132,36 +132,41 @@ function ProjectRow({
         onClick={onToggle}
         className="w-full flex items-center gap-1.5 px-3 py-1.5 hover:bg-accent transition-colors text-left"
       >
-        {isExpanded ? (
-          <ChevronDown size={13} className="text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight size={13} className="text-muted-foreground shrink-0" />
-        )}
+        <ChevronRight
+          size={13}
+          className="text-muted-foreground shrink-0 transition-transform duration-200"
+          style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}
+        />
         <FolderOpen size={13} className="text-muted-foreground shrink-0" />
         <span className="truncate text-foreground text-xs font-medium">{project.displayName}</span>
         <span className="ml-auto text-xs text-muted-foreground shrink-0">{project.sessionCount}</span>
       </button>
 
-      {isExpanded && (
-        <div className="pl-2">
-          {isLoadingSessions ? (
-            <div className="px-4 py-1.5 text-xs text-muted-foreground flex items-center gap-1.5">
-              <RefreshCw size={11} className="animate-spin" /> Loading…
-            </div>
-          ) : sessions?.length === 0 ? (
-            <div className="px-4 py-1.5 text-xs text-muted-foreground">No sessions</div>
-          ) : (
-            sessions?.map((session) => (
-              <SessionRow
-                key={session.id}
-                session={session}
-                isSelected={session.id === selectedSessionId}
-                onSelect={() => onSelectSession(session.id)}
-              />
-            ))
-          )}
+      <div
+        className="collapsible-grid"
+        style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
+      >
+        <div>
+          <div className="pl-2">
+            {isLoadingSessions ? (
+              <div className="px-4 py-1.5 text-xs text-muted-foreground flex items-center gap-1.5">
+                <RefreshCw size={11} className="animate-spin" /> Loading…
+              </div>
+            ) : sessions?.length === 0 ? (
+              <div className="px-4 py-1.5 text-xs text-muted-foreground">No sessions</div>
+            ) : (
+              sessions?.map((session) => (
+                <SessionRow
+                  key={session.id}
+                  session={session}
+                  isSelected={session.id === selectedSessionId}
+                  onSelect={() => onSelectSession(session.id)}
+                />
+              ))
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -190,7 +195,7 @@ function SessionRow({
       <div className="flex items-center gap-2 mt-0.5">
         <span className="text-[10px] text-muted-foreground">{ago}</span>
         <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-          <MessageSquare size={9} /> {session.messageCount}
+          <MessageSquare size={9} /> {session.userMessageCount}
         </span>
       </div>
     </button>

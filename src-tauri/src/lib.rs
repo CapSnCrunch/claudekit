@@ -6,7 +6,7 @@ mod parser;
 use std::sync::Mutex;
 
 use commands::{
-    dashboard::{get_dashboard_stats, get_heatmap_data},
+    dashboard::{get_dashboard_stats, get_heatmap_data, get_day_detail},
     projects::list_projects,
     sessions::{get_session_messages, list_sessions},
 };
@@ -46,6 +46,7 @@ pub fn run() {
             get_session_messages,
             get_dashboard_stats,
             get_heatmap_data,
+            get_day_detail,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

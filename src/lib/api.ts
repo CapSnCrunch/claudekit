@@ -5,6 +5,7 @@ import type {
   MessageRecord,
   DashboardStats,
   HeatmapDay,
+  DayDetail,
   IndexStats,
 } from "@/types";
 
@@ -26,4 +27,7 @@ export const api = {
 
   getHeatmapData: (year?: number) =>
     invoke<HeatmapDay[]>("get_heatmap_data", { year }),
+
+  getDayDetail: (date: string) =>
+    invoke<DayDetail>("get_day_detail", { date }),
 };
