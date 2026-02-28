@@ -362,8 +362,8 @@ This master PRD is the parent of the following phase-level documents (to be crea
 
 | Document | Phase | Status |
 |---------|-------|--------|
-| Phase1_SessionBrowser_PRD.md | Phase 1 | To be written |
-| Phase1_SessionBrowser_TDD.md | Phase 1 | To be written |
+| Phase1_SessionBrowser_PRD.md | Phase 1 | Draft ✓ |
+| Phase1_SessionBrowser_TDD.md | Phase 1 | Draft ✓ |
 | Phase2_InsightsEngine_PRD.md | Phase 2 | To be written |
 | Phase2_InsightsEngine_TDD.md | Phase 2 | To be written |
 | Phase3_RealtimeFeedback_PRD.md | Phase 3 | To be written |
