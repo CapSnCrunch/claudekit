@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    claudekit_scaffold_lib::run()
+    claudekit_lib::run()
 }
