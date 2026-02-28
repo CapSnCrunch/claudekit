@@ -59,6 +59,12 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE sessions ADD COLUMN user_message_count INTEGER NOT NULL DEFAULT 0;
     UPDATE sessions SET indexed_at = '1970-01-01 00:00:00';
     ",
+
+    // v3 — force re-index again: previous v2 re-index ran with the old binary
+    //       before is_human_prompt detection was compiled in, so all sessions
+    //       got indexed with is_human_prompt = 0. Reset indexed_at so the next
+    //       launch re-indexes everything with the correct code.
+    "UPDATE sessions SET indexed_at = '1970-01-01 00:00:00';",
 ];
 
 pub fn run_migrations(conn: &Connection) -> Result<(), DbError> {

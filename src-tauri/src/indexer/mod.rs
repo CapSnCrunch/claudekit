@@ -325,3 +325,146 @@ pub fn claude_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".claude")
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::Connection;
+    use crate::parser::jsonl::JournalEntry;
+    use crate::db::schema::run_migrations;
+
+    // Build a minimal JournalEntry from a JSON string (the JSONL line).
+    fn entry(json: &str) -> JournalEntry {
+        serde_json::from_str(json).expect("test entry must be valid JSON")
+    }
+
+    // Convenience: run migrations on an in-memory DB and return it.
+    fn in_memory_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        conn
+    }
+
+    // ── is_human_prompt detection ─────────────────────────────────────────────
+
+    #[test]
+    fn plain_string_content_is_human_prompt() {
+        let e = entry(r#"{
+            "type":"user","uuid":"u1","sessionId":"s1","timestamp":"2025-01-01T00:00:00Z",
+            "message":{"role":"user","content":"hello world"}
+        }"#);
+        // Replicate the detection logic exactly as it appears in upsert_session
+        let is_human = is_human_prompt_for(&e);
+        assert_eq!(is_human, 1, "plain string content should be a human prompt");
+    }
+
+    #[test]
+    fn text_block_array_is_human_prompt() {
+        let e = entry(r#"{
+            "type":"user","uuid":"u2","sessionId":"s1","timestamp":"2025-01-01T00:00:00Z",
+            "message":{"role":"user","content":[{"type":"text","text":"hello"}]}
+        }"#);
+        assert_eq!(is_human_prompt_for(&e), 1);
+    }
+
+    #[test]
+    fn tool_result_only_is_not_human_prompt() {
+        let e = entry(r#"{
+            "type":"user","uuid":"u3","sessionId":"s1","timestamp":"2025-01-01T00:00:00Z",
+            "message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}
+        }"#);
+        assert_eq!(is_human_prompt_for(&e), 0, "tool_result-only should not be a human prompt");
+    }
+
+    #[test]
+    fn mixed_tool_result_and_text_is_human_prompt() {
+        // If the user also typed something alongside a tool result, count it.
+        let e = entry(r#"{
+            "type":"user","uuid":"u4","sessionId":"s1","timestamp":"2025-01-01T00:00:00Z",
+            "message":{"role":"user","content":[
+                {"type":"tool_result","tool_use_id":"t1","content":"ok"},
+                {"type":"text","text":"and also this"}
+            ]}
+        }"#);
+        assert_eq!(is_human_prompt_for(&e), 1);
+    }
+
+    #[test]
+    fn assistant_role_is_not_human_prompt() {
+        let e = entry(r#"{
+            "type":"assistant","uuid":"u5","sessionId":"s1","timestamp":"2025-01-01T00:00:00Z",
+            "message":{"role":"assistant","content":"I will help"}
+        }"#);
+        assert_eq!(is_human_prompt_for(&e), 0);
+    }
+
+    #[test]
+    fn summary_entry_is_not_human_prompt() {
+        let e = entry(r#"{
+            "type":"summary","uuid":"u6","sessionId":"s1","timestamp":"2025-01-01T00:00:00Z",
+            "message":{"role":"user","content":"summary text"}
+        }"#);
+        assert_eq!(is_human_prompt_for(&e), 0);
+    }
+
+    // ── Full upsert_session integration ──────────────────────────────────────
+
+    #[test]
+    fn upsert_session_counts_user_messages_correctly() {
+        let conn = in_memory_db();
+        // Insert a dummy project row first (FK constraint)
+        conn.execute(
+            "INSERT INTO projects (id, decoded_path, display_name) VALUES ('p1','/','')",
+            [],
+        ).unwrap();
+
+        let entries: Vec<JournalEntry> = vec![
+            entry(r#"{"type":"user","uuid":"a","sessionId":"s","timestamp":"2025-01-01T00:00:00Z","message":{"role":"user","content":"first human message"}}"#),
+            entry(r#"{"type":"user","uuid":"b","sessionId":"s","timestamp":"2025-01-01T00:00:01Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":"done"}]}}"#),
+            entry(r#"{"type":"assistant","uuid":"c","sessionId":"s","timestamp":"2025-01-01T00:00:02Z","message":{"role":"assistant","content":"response"}}"#),
+            entry(r#"{"type":"user","uuid":"d","sessionId":"s","timestamp":"2025-01-01T00:00:03Z","message":{"role":"user","content":"second human message"}}"#),
+        ];
+
+        let count = super::upsert_session(&conn, "s", "p1", &entries).unwrap();
+        assert_eq!(count, 4, "all 4 entries should be inserted");
+
+        let user_msg_count: i64 = conn
+            .query_row("SELECT user_message_count FROM sessions WHERE id = 's'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(user_msg_count, 2, "only 2 human-typed messages");
+
+        let human_flags: Vec<i64> = {
+            let mut stmt = conn.prepare(
+                "SELECT is_human_prompt FROM messages ORDER BY ordinal"
+            ).unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap()
+                .filter_map(|r| r.ok()).collect()
+        };
+        assert_eq!(human_flags, vec![1, 0, 0, 1]);
+    }
+
+    // ── Helper: mirrors the is_human_prompt logic from upsert_session ─────────
+
+    fn is_human_prompt_for(entry: &JournalEntry) -> i64 {
+        let role = entry.message.as_ref()
+            .and_then(|m| m.role.as_deref())
+            .unwrap_or(&entry.entry_type);
+        let is_summary = if entry.entry_type == "summary" { 1i64 } else { 0 };
+
+        if role == "user" && is_summary == 0 {
+            if let Some(msg) = &entry.message {
+                if let Some(content) = &msg.content {
+                    if content.is_string() {
+                        return 1;
+                    } else if let Some(arr) = content.as_array() {
+                        if arr.iter().any(|b| {
+                            b.get("type").and_then(|t| t.as_str()) == Some("text")
+                        }) { return 1; }
+                    }
+                }
+            }
+        }
+        0
+    }
+}
