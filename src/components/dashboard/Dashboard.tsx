@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { MessageSquare, FolderOpen, TrendingUp, TrendingDown, Minus, Hash, X } from "lucide-react";
+import { MessageSquare, FolderOpen, TrendingUp, TrendingDown, Minus, Hash, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
 import type { DashboardStats, HeatmapDay, DayDetail } from "@/types";
 import { ActivityHeatmap } from "./ActivityHeatmap";
@@ -8,13 +8,20 @@ import { ActivityHeatmap } from "./ActivityHeatmap";
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapDay[]>([]);
-  const [year] = useState(new Date().getFullYear());
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dayDetail, setDayDetail] = useState<DayDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   useEffect(() => {
     api.getDashboardStats().then(setStats).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    setHeatmap([]);
+    setSelectedDate(null);
+    setDayDetail(null);
     api.getHeatmapData(year).then(setHeatmap).catch(console.error);
   }, [year]);
 
@@ -80,14 +87,36 @@ export function Dashboard() {
         <div className="bg-card border border-border rounded-lg p-5 heatmap-root relative">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-sm font-medium text-foreground">Activity — {year}</h2>
+              <h2 className="text-sm font-medium text-foreground">Activity</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Messages sent per day · click a day for details
               </p>
             </div>
-            <span className="text-xs text-muted-foreground">
-              {heatmap.reduce((s, d) => s + d.count, 0).toLocaleString()} total
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {heatmap.reduce((s, d) => s + d.count, 0).toLocaleString()} total
+              </span>
+              <div className="flex items-center gap-0.5 ml-2">
+                <button
+                  onClick={() => setYear((y) => y - 1)}
+                  className="p-1 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                  aria-label="Previous year"
+                >
+                  <ChevronLeft size={13} />
+                </button>
+                <span className="text-xs font-medium text-foreground w-10 text-center tabular-nums">
+                  {year}
+                </span>
+                <button
+                  onClick={() => setYear((y) => y + 1)}
+                  disabled={year >= currentYear}
+                  className="p-1 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label="Next year"
+                >
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+            </div>
           </div>
           <ActivityHeatmap
             data={heatmap}
