@@ -5,6 +5,8 @@ interface AppShellProps {
   selectedSessionId: string | null;
   onSelectProject: (id: string) => void;
   onSelectSession: (id: string | null) => void;
+  lastSynced: number;
+  onSync: () => Promise<void>;
   children: React.ReactNode;
 }
 
@@ -13,6 +15,8 @@ export function AppShell({
   selectedSessionId,
   onSelectProject,
   onSelectSession,
+  lastSynced,
+  onSync,
   children,
 }: AppShellProps) {
   return (
@@ -22,6 +26,8 @@ export function AppShell({
         selectedSessionId={selectedSessionId}
         onSelectProject={onSelectProject}
         onSelectSession={onSelectSession}
+        lastSynced={lastSynced}
+        onSync={onSync}
       />
       <main className="flex-1 overflow-hidden">{children}</main>
     </div>
