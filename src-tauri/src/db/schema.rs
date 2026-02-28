@@ -68,6 +68,7 @@ const MIGRATIONS: &[&str] = &[
 ];
 
 pub fn run_migrations(conn: &Connection) -> Result<(), DbError> {
+    // NOTE: tests live at the bottom of this file.
     // Ensure the migrations table exists before querying it
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -97,4 +98,96 @@ pub fn run_migrations(conn: &Connection) -> Result<(), DbError> {
     }
 
     Ok(())
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fresh() -> Connection {
+        Connection::open_in_memory().unwrap()
+    }
+
+    #[test]
+    fn migrations_run_on_fresh_db() {
+        let conn = fresh();
+        run_migrations(&conn).unwrap();
+        let version: i64 = conn
+            .query_row("SELECT MAX(version) FROM schema_migrations", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, MIGRATIONS.len() as i64);
+    }
+
+    #[test]
+    fn migrations_are_idempotent() {
+        let conn = fresh();
+        run_migrations(&conn).unwrap();
+        // Running again must not fail (no duplicate inserts, no re-applied ALTER TABLE)
+        run_migrations(&conn).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, MIGRATIONS.len() as i64, "each version recorded exactly once");
+    }
+
+    #[test]
+    fn schema_has_expected_tables() {
+        let conn = fresh();
+        run_migrations(&conn).unwrap();
+        for table in &["projects", "sessions", "messages", "schema_migrations"] {
+            let exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(exists, 1, "table '{table}' must exist after migrations");
+        }
+    }
+
+    #[test]
+    fn sessions_table_has_user_message_count_column() {
+        let conn = fresh();
+        run_migrations(&conn).unwrap();
+        // If the column doesn't exist this INSERT would fail
+        conn.execute(
+            "INSERT INTO projects (id, decoded_path, display_name) VALUES ('p','/','')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, project_id, title, message_count, user_message_count, created_at, updated_at)
+             VALUES ('s','p',NULL,0,5,'2025-01-01','2025-01-01')",
+            [],
+        ).unwrap();
+        let v: i64 = conn
+            .query_row("SELECT user_message_count FROM sessions WHERE id='s'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 5);
+    }
+
+    #[test]
+    fn messages_table_has_is_human_prompt_column() {
+        let conn = fresh();
+        run_migrations(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO projects (id, decoded_path, display_name) VALUES ('p','/','')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, project_id, title, message_count, created_at, updated_at) VALUES ('s','p',NULL,0,'2025-01-01','2025-01-01')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO messages (id, session_id, role, is_summary, is_human_prompt, content_json, timestamp, ordinal)
+             VALUES ('m1','s','user',0,1,'\"hello\"','2025-01-01T00:00:00Z',0)",
+            [],
+        ).unwrap();
+        let v: i64 = conn
+            .query_row("SELECT is_human_prompt FROM messages WHERE id='m1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 1);
+    }
 }

@@ -444,6 +444,163 @@ mod tests {
         assert_eq!(human_flags, vec![1, 0, 0, 1]);
     }
 
+    // ── needs_reindex ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn needs_reindex_true_when_session_not_in_db() {
+        let conn = in_memory_db();
+        let f = tempfile::NamedTempFile::new().unwrap();
+        // Session "missing" does not exist in the DB → must re-index
+        assert!(super::needs_reindex(&conn, "missing", f.path()));
+    }
+
+    #[test]
+    fn needs_reindex_true_when_file_newer_than_indexed_at() {
+        let conn = in_memory_db();
+        conn.execute(
+            "INSERT INTO projects (id, decoded_path, display_name) VALUES ('p','/','')",
+            [],
+        ).unwrap();
+        // Set indexed_at to the distant past
+        conn.execute(
+            "INSERT INTO sessions (id, project_id, title, message_count, created_at, updated_at, indexed_at)
+             VALUES ('s','p',NULL,0,'2020-01-01','2020-01-01','1970-01-01 00:00:00')",
+            [],
+        ).unwrap();
+        let f = tempfile::NamedTempFile::new().unwrap();
+        // Any real file's mtime will be >> epoch → needs reindex
+        assert!(super::needs_reindex(&conn, "s", f.path()));
+    }
+
+    #[test]
+    fn needs_reindex_false_when_file_older_than_indexed_at() {
+        let conn = in_memory_db();
+        conn.execute(
+            "INSERT INTO projects (id, decoded_path, display_name) VALUES ('p','/','')",
+            [],
+        ).unwrap();
+        // Set indexed_at far in the future (year 9999)
+        conn.execute(
+            "INSERT INTO sessions (id, project_id, title, message_count, created_at, updated_at, indexed_at)
+             VALUES ('s','p',NULL,0,'2020-01-01','2020-01-01','9999-12-31 23:59:59')",
+            [],
+        ).unwrap();
+        let f = tempfile::NamedTempFile::new().unwrap();
+        // File mtime will be << year 9999 → no reindex needed
+        assert!(!super::needs_reindex(&conn, "s", f.path()));
+    }
+
+    // ── run_full_index end-to-end ─────────────────────────────────────────────
+
+    /// Write JSONL lines to a temp file inside `dir/<project_name>/<session_id>.jsonl`.
+    fn write_session(
+        base: &std::path::Path,
+        project: &str,
+        session_id: &str,
+        lines: &[&str],
+    ) -> std::path::PathBuf {
+        let proj_dir = base.join("projects").join(project);
+        std::fs::create_dir_all(&proj_dir).unwrap();
+        let path = proj_dir.join(format!("{session_id}.jsonl"));
+        let content = lines.join("\n") + "\n";
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[test]
+    fn run_full_index_empty_projects_dir_returns_zero_stats() {
+        let conn = in_memory_db();
+        let tmp = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("projects")).unwrap();
+        let stats = super::run_full_index(&conn, tmp.path()).unwrap();
+        assert_eq!(stats.projects_indexed, 0);
+        assert_eq!(stats.sessions_indexed, 0);
+        assert_eq!(stats.messages_indexed, 0);
+    }
+
+    #[test]
+    fn run_full_index_missing_projects_dir_returns_zero_stats() {
+        let conn = in_memory_db();
+        let tmp = tempfile::TempDir::new().unwrap();
+        // Don't create the projects dir at all
+        let stats = super::run_full_index(&conn, tmp.path()).unwrap();
+        assert_eq!(stats.projects_indexed, 0);
+    }
+
+    #[test]
+    fn run_full_index_indexes_project_and_session() {
+        let conn = in_memory_db();
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        // Encode project name the same way Claude Code does: /Users/alice → -Users-alice
+        let project = "-Users-alice-Code-myproject";
+        write_session(tmp.path(), project, "sess-001", &[
+            r#"{"type":"user","uuid":"m1","sessionId":"sess-001","timestamp":"2025-03-10T09:00:00Z","message":{"role":"user","content":"first message"}}"#,
+            r#"{"type":"user","uuid":"m2","sessionId":"sess-001","timestamp":"2025-03-10T09:00:01Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}"#,
+            r#"{"type":"assistant","uuid":"m3","sessionId":"sess-001","timestamp":"2025-03-10T09:00:02Z","message":{"role":"assistant","content":"done"}}"#,
+        ]);
+
+        let stats = super::run_full_index(&conn, tmp.path()).unwrap();
+        assert_eq!(stats.projects_indexed, 1);
+        assert_eq!(stats.sessions_indexed, 1);
+        assert_eq!(stats.messages_indexed, 3);
+
+        // Project row exists
+        let proj_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM projects WHERE id = ?1", [project], |r| r.get(0))
+            .unwrap();
+        assert_eq!(proj_count, 1);
+
+        // Session row has correct user_message_count (only 1 plain-text prompt)
+        let umc: i64 = conn
+            .query_row("SELECT user_message_count FROM sessions WHERE id = 'sess-001'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(umc, 1);
+
+        // Messages table populated
+        let msg_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM messages WHERE session_id = 'sess-001'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(msg_count, 3);
+    }
+
+    #[test]
+    fn run_full_index_skips_unchanged_sessions_on_second_run() {
+        let conn = in_memory_db();
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        write_session(tmp.path(), "-p1", "s1", &[
+            r#"{"type":"user","uuid":"m1","sessionId":"s1","timestamp":"2025-01-01T00:00:00Z","message":{"role":"user","content":"hi"}}"#,
+        ]);
+
+        // First run indexes it
+        let s1 = super::run_full_index(&conn, tmp.path()).unwrap();
+        assert_eq!(s1.sessions_indexed, 1);
+
+        // Second run without file changes: file mtime has NOT advanced, so skip
+        let s2 = super::run_full_index(&conn, tmp.path()).unwrap();
+        assert_eq!(s2.sessions_indexed, 0, "unchanged file must be skipped");
+    }
+
+    #[test]
+    fn run_full_index_multiple_projects_and_sessions() {
+        let conn = in_memory_db();
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        let line = |uuid: &str, sid: &str| -> String {
+            format!(r#"{{"type":"user","uuid":"{uuid}","sessionId":"{sid}","timestamp":"2025-05-01T00:00:00Z","message":{{"role":"user","content":"msg"}}}}"#)
+        };
+
+        write_session(tmp.path(), "-proj-a", "s-a1", &[&line("u1", "s-a1")]);
+        write_session(tmp.path(), "-proj-a", "s-a2", &[&line("u2", "s-a2")]);
+        write_session(tmp.path(), "-proj-b", "s-b1", &[&line("u3", "s-b1")]);
+
+        let stats = super::run_full_index(&conn, tmp.path()).unwrap();
+        assert_eq!(stats.projects_indexed, 2);
+        assert_eq!(stats.sessions_indexed, 3);
+        assert_eq!(stats.messages_indexed, 3);
+    }
+
     // ── Helper: mirrors the is_human_prompt logic from upsert_session ─────────
 
     fn is_human_prompt_for(entry: &JournalEntry) -> i64 {
