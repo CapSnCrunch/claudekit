@@ -1,50 +1,54 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useEffect, useState } from "react";
+import "./index.css";
+import { api } from "@/lib/api";
+import { AppShell } from "@/components/layout/AppShell";
+import { ConversationView } from "@/components/session/ConversationView";
+import { RefreshCw } from "lucide-react";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [indexing, setIndexing] = useState(true);
+  const [indexStats, setIndexStats] = useState<string | null>(null);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  useEffect(() => {
+    api
+      .runIndex()
+      .then((stats) => {
+        setIndexStats(
+          `Indexed ${stats.sessionsIndexed} sessions across ${stats.projectsIndexed} projects in ${stats.durationMs}ms`
+        );
+      })
+      .catch((e) => console.error("Index failed:", e))
+      .finally(() => setIndexing(false));
+  }, []);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <AppShell
+      selectedProjectId={selectedProjectId}
+      selectedSessionId={selectedSessionId}
+      onSelectProject={setSelectedProjectId}
+      onSelectSession={setSelectedSessionId}
+    >
+      {indexing ? (
+        <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+          <RefreshCw size={14} className="animate-spin" />
+          <span className="text-sm">Indexing sessions…</span>
+        </div>
+      ) : selectedSessionId ? (
+        <ConversationView sessionId={selectedSessionId} />
+      ) : (
+        <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-8">
+          <p className="text-2xl font-semibold text-foreground">ClaudeKit</p>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            Select a project and session from the sidebar to browse your Claude Code history.
+          </p>
+          {indexStats && (
+            <p className="text-xs text-muted-foreground mt-2">{indexStats}</p>
+          )}
+        </div>
+      )}
+    </AppShell>
   );
 }
 
