@@ -42,9 +42,16 @@ export function Sidebar({
 
   async function handleSync() {
     setSyncing(true);
+    const startTime = Date.now();
     try {
       await onSync();
     } finally {
+      // Ensure animation runs for at least 500ms for visual feedback
+      const elapsed = Date.now() - startTime;
+      const minDuration = 500;
+      if (elapsed < minDuration) {
+        await new Promise(resolve => setTimeout(resolve, minDuration - elapsed));
+      }
       setSyncing(false);
     }
   }
@@ -90,7 +97,7 @@ export function Sidebar({
           onClick={handleSync}
           disabled={syncing}
           title="Sync sessions"
-          className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+          className="text-muted-foreground hover:text-foreground transition-all active:scale-95 disabled:opacity-40"
         >
           <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
         </button>
