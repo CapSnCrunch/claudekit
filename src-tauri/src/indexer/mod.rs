@@ -47,7 +47,19 @@ pub fn run_full_index(conn: &Connection, claude_dir: &Path) -> Result<IndexStats
         }
 
         let dir_name = entry.file_name().to_string_lossy().to_string();
-        let decoded_path = proj::decode_project_path(&dir_name);
+
+        // Try to read the actual project path from sessions-index.json first
+        let decoded_path = match proj::read_project_path(entry.path()) {
+            Ok(path) => path,
+            Err(_) => {
+                // Fallback to decoding from directory name if sessions-index.json doesn't exist
+                log::warn!(
+                    "Could not read project path from sessions-index.json for {}, using fallback decoding",
+                    dir_name
+                );
+                proj::decode_project_path(&dir_name)
+            }
+        };
         let display = proj::display_name(&decoded_path);
 
         upsert_project(conn, &dir_name, &decoded_path, &display)
